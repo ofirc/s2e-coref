@@ -137,6 +137,14 @@ def parse_args():
 
     parser.add_argument("--conll_path_for_eval", type=str, default=None)
     parser.add_argument("--num-examples", type=int, default=None)
+    parser.add_argument("--is-generative", action="store_true", default=False)
+
+    parser.add_argument("--pandas-dataframe",
+                        help="Path to the filtered coreference parquet data frame. "
+                             "This is required when --is-generative is passed.")
 
     args = parser.parse_args()
+    if args.is_generative and not args.pandas_dataframe:
+        parser.error("you must provide pandas dataframe when using --is-generative.")
+
     return args

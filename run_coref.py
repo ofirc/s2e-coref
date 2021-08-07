@@ -8,11 +8,13 @@ import torch
 
 from transformers import AutoConfig, AutoTokenizer, CONFIG_MAPPING, LongformerConfig, RobertaConfig
 
+from transformers import T5ForConditionalGeneration
+
 from modeling import S2E
 from data import get_dataset
 from cli import parse_args
 from training import train, set_seed
-from eval import Evaluator
+from eval import Evaluator, GenerativeEvaluator
 from utils import write_meta_data
 
 logger = logging.getLogger(__name__)
@@ -96,15 +98,21 @@ def main():
             "and load it from here, using --tokenizer_name"
         )
 
-    config_class = LongformerConfig
-    base_model_prefix = "longformer"
+    if not args.is_generative:
+        config_class = LongformerConfig
+        base_model_prefix = "longformer"
 
-    S2E.config_class = config_class
-    S2E.base_model_prefix = base_model_prefix
-    model = S2E.from_pretrained(args.model_name_or_path,
-                                config=config,
-                                cache_dir=args.cache_dir,
-                                args=args)
+        S2E.config_class = config_class
+        S2E.base_model_prefix = base_model_prefix
+        model = S2E.from_pretrained(args.model_name_or_path,
+                                    config=config,
+                                    cache_dir=args.cache_dir,
+                                    args=args)
+    else:
+        # TODO: why S2E.from_pretrained accepts args and for T5 it throws exception?
+        #       do we need to pass args?
+        model = T5ForConditionalGeneration.from_pretrained(args.model_name_or_path, config=config,
+                                                           cache_dir=args.cache_dir)
 
     model.to(args.device)
 
@@ -114,7 +122,11 @@ def main():
 
     logger.info("Training/evaluation parameters %s", args)
 
-    evaluator = Evaluator(args, tokenizer)
+    if args.is_generative:
+        evaluator = GenerativeEvaluator(args, tokenizer)
+    else:
+        evaluator = Evaluator(args, tokenizer)
+
     # Training
     if args.do_train:
         train_dataset = get_dataset(args, tokenizer, evaluate=False)
@@ -147,6 +159,8 @@ def main():
         result = evaluator.evaluate(model, prefix="final_evaluation", official=True)
         results.update(result)
         return results
+
+    logger.info("Returning: {}".format(len(results)))
 
     return results
 

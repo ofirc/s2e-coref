@@ -13,6 +13,27 @@ from conll import evaluate_conll
 
 logger = logging.getLogger(__name__)
 
+from collections import defaultdict
+import itertools
+
+
+def get_ranges(i):
+    for a, b in itertools.groupby(enumerate(i), lambda pair: pair[1] - pair[0]):
+        b = list(b)
+        yield b[0][1], b[-1][1]
+
+
+def convert_seq_to_spans(seq):
+    my_dict = {i: key for i, key in enumerate(seq.split()) if key != '-'}
+    v = defaultdict(list)
+    for key, value in sorted(my_dict.items()):
+        v[value].append(key)
+    spans = []
+    for value in v.values():
+        tuples_to_add = tuple(get_ranges(value))
+        spans.append(tuples_to_add)
+    return spans
+
 
 class Evaluator:
     def __init__(self, args, tokenizer):
@@ -144,3 +165,161 @@ class Evaluator:
                 logger.info('Official avg F1: %.4f' % official_f1)
 
         return results
+
+class GenerativeEvaluator(Evaluator):
+    def __init__(self, args, tokenizer):
+        Evaluator.__init__(self, args, tokenizer)
+
+    def evaluate(self, model, prefix="", tb_writer=None, global_step=None, official=False):
+        eval_dataset = get_dataset(self.args, tokenizer=self.tokenizer, evaluate=True)
+
+        # if self.args.num_examples:
+        #     eval_dataset.examples = eval_dataset.examples[:self.args.num_examples]
+        #     eval_dataset.lengths = eval_dataset.lengths[:self.args.num_examples]
+
+        if self.eval_output_dir and not os.path.exists(self.eval_output_dir) and self.args.local_rank in [-1, 0]:
+            os.makedirs(self.eval_output_dir)
+
+        # Note that DistributedSampler samples randomly
+        # eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
+        #eval_dataloader = BucketBatchSampler(eval_dataset, max_total_seq_len=self.args.max_total_seq_len, batch_size_1=True)
+
+        val_params = {
+            "batch_size": 1,
+            "shuffle": False,
+            "num_workers": 0,
+        }
+
+        # Creation of Dataloaders for testing and validation. This will be used down for training and validation stage for the model.
+        from torch.utils.data import DataLoader
+        val_loader = DataLoader(eval_dataset, **val_params)
+
+        # Eval!
+        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info("  Examples number: %d", len(eval_dataset))
+        model.eval()
+
+        predictions = []
+        actuals = []
+        coref_evaluator = CorefEvaluator()
+        with torch.no_grad():
+            for _, data in enumerate(val_loader, 0):
+                y = data['target_ids'].to(self.args.device, dtype=torch.long)
+                ids = data['source_ids'].to(self.args.device, dtype=torch.long)
+                mask = data['source_mask'].to(self.args.device, dtype=torch.long)
+
+                generated_ids = model.generate(
+                    input_ids=ids,
+                    attention_mask=mask,
+                    max_length=150,
+                    num_beams=2,
+                    repetition_penalty=2.5,
+                    length_penalty=1.0,
+                    early_stopping=True
+                )
+                preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in
+                         generated_ids]
+                target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True) for t in y]
+                if _ % 10 == 0:
+                    logger.info(f'Completed {_}')
+
+                preds_spans = convert_seq_to_spans(" ".join(preds))
+                target_spans = convert_seq_to_spans(" ".join(target))
+
+                mention_to_gold_clusters = extract_mentions_to_predicted_clusters_from_clusters(target_spans)
+                mention_to_predicted_clusters = extract_mentions_to_predicted_clusters_from_clusters(preds_spans)
+                coref_evaluator.update(preds_spans, target_spans,
+                                       mention_to_predicted_clusters,
+                                       mention_to_gold_clusters)
+
+
+                predictions.extend(preds)
+                actuals.extend(target)
+
+        prec, rec, f1 = coref_evaluator.get_prf()
+
+        results = []
+        results += [
+            ("precision", prec),
+            ("recall", rec),
+            ("f1", f1)
+        ]
+        logger.info("***** Eval results {} *****".format(prefix))
+        for key, values in results:
+            if isinstance(values, float):
+                logger.info(f"  {key} = {values:.3f}")
+            else:
+                logger.info(f"  {key} = {values}")
+            if tb_writer is not None and global_step is not None:
+                tb_writer.add_scalar(key, values, global_step)
+
+        if self.eval_output_dir:
+            output_eval_file = os.path.join(self.eval_output_dir, "eval_results.txt")
+            with open(output_eval_file, "a") as writer:
+                if prefix:
+                    writer.write(f'\n{prefix}:\n')
+                for key, values in results:
+                    if isinstance(values, float):
+                        writer.write(f"{key} = {values:.3f}\n")
+                    else:
+                        writer.write(f"{key} = {values}\n")
+
+        results = OrderedDict(results)
+        results["experiment_name"] = self.args.experiment_name
+        results["data"] = prefix
+        with open(os.path.join(self.args.output_dir, "results.jsonl"), "a+") as f:
+            f.write(json.dumps(results) + '\n')
+
+        # TODO: later.
+        # if official:
+        #     with open(os.path.join(self.args.output_dir, "preds.jsonl"), "w") as f:
+        #         f.write(json.dumps(doc_to_prediction) + '\n')
+        #         f.write(json.dumps(doc_to_subtoken_map) + '\n')
+        #
+        #     if self.args.conll_path_for_eval is not None:
+        #         conll_results = evaluate_conll(self.args.conll_path_for_eval, doc_to_prediction, doc_to_subtoken_map)
+        #         official_f1 = sum(results["f"] for results in conll_results.values()) / len(conll_results)
+        #         logger.info('Official avg F1: %.4f' % official_f1)
+
+        return results
+
+
+        # coref_evaluator = CorefEvaluator()
+        # for (doc_key, subtoken_maps), batch in val_loader:
+        #
+        #     batch = tuple(tensor.to(self.args.device) for tensor in batch)
+        #     input_ids, attention_mask, gold_clusters = batch
+        #
+        #     with torch.no_grad():
+        #         # outputs = model(input_ids=input_ids,
+        #         #                 attention_mask=attention_mask,
+        #         #                 gold_clusters=gold_clusters,
+        #         #                 return_all_outputs=True)
+        #
+        #         # TODO: the following code works:
+        #         # ids = torch.randint(3, 5, (2,128))
+        #         # mask = torch.randint(3, 5, (2,128))
+        #         # generated_ids = model.generate(input_ids = ids, attention_mask = mask, max_length=128, num_beams=2, repetition_penalty=2.5, length_penalty=1.0, early_stopping=True)
+        #         # generated_ids.shape
+        #         # torch.Size([2, 128])
+        #
+        #         #
+        #         # But when using the cached pickled artifacts we get [1, 497], and when using the
+        #         # non-cached artifacts, i.e. CorefDataset population, we get [1, 606].
+        #         # We need to wrap the data to max sequence length, 128, this was probably used
+        #         # when we fine-tuned the model and the model refuses to accept other lengths.
+        #         # This (wrapping to 128) should be done in CorefDataset class.
+        #         #
+        #
+        #         generated_ids = model.generate(
+        #             input_ids = input_ids,
+        #             attention_mask = attention_mask,
+        #             max_length=self.args.max_total_seq_len,
+        #             num_beams=2,
+        #             repetition_penalty=2.5,
+        #             length_penalty=1.0,
+        #             early_stopping=True
+        #             )
+        #         preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in generated_ids]
+        #         pass
+        #         #target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)for t in y]
