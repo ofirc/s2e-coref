@@ -180,12 +180,14 @@ def handle_line(line, document_state, language, labels, stats):
 
 
 def minimize_partition(data_dir, name, language, extension, labels, stats):
-    input_path = f"{data_dir}/{name}.{language}.{extension}"
-    output_path = f"{data_dir}/{name}.{language}.jsonlines"
+    #input_path = f"{data_dir}/{name}.{language}.{extension}"
+    #output_path = f"{data_dir}/{name}.{language}.jsonlines"
+    input_path = f"{data_dir}/{name}"
+    output_path = f"{data_dir}/{name}.jsonlines"
     count = 0
     print("Minimizing {}".format(input_path))
-    with open(input_path, "r") as input_file:
-        with open(output_path, "w") as output_file:
+    with open(input_path, "r", encoding="utf-8") as input_file:
+        with open(output_path, "w", encoding="utf-8") as output_file:
             document_state = DocumentState()
             for line in input_file.readlines():
                 document = handle_line(line, document_state, language, labels, stats)
@@ -198,16 +200,16 @@ def minimize_partition(data_dir, name, language, extension, labels, stats):
 
 
 def minimize_language(data_dir, language, labels, stats):
-    minimize_partition(data_dir, "dev", language, "v4_gold_conll", labels, stats)
-    minimize_partition(data_dir, "train", language, "v4_gold_conll", labels, stats)
-    minimize_partition(data_dir, "test", language, "v4_gold_conll", labels, stats)
+    minimize_partition(data_dir, "dev", language, "", labels, stats)
+    minimize_partition(data_dir, "train", language, "", labels, stats)
+    minimize_partition(data_dir, "test", language, "", labels, stats)
 
 
 if __name__ == "__main__":
     data_dir = sys.argv[1]
     labels = collections.defaultdict(set)
     stats = collections.defaultdict(int)
-    minimize_language(data_dir, "english", labels, stats)
+    minimize_language(data_dir, "", labels, stats)
     # minimize_language("chinese", labels, stats)
     # minimize_language("arabic", labels, stats)
     for k, v in labels.items():

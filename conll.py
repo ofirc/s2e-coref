@@ -93,8 +93,8 @@ def official_conll_eval(gold_path, predicted_path, metric, official_stdout=True)
 
 
 def evaluate_conll(gold_path, predictions, subtoken_maps, official_stdout=True):
-    with tempfile.NamedTemporaryFile(delete=True, mode="w") as prediction_file:
-        with open(gold_path, "r") as gold_file:
+    with tempfile.NamedTemporaryFile(delete=True, mode="w", encoding="utf-8") as prediction_file:
+        with open(gold_path, "r", encoding="utf-8") as gold_file:
             output_conll(gold_file, prediction_file, predictions, subtoken_maps)
         # logger.info("Predicted conll file: {}".format(prediction_file.name))
         results = {m: official_conll_eval(gold_file.name, prediction_file.name, m, official_stdout) for m in ("muc", "bcub", "ceafe") }
