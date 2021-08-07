@@ -23,6 +23,10 @@ class Evaluator:
     def evaluate(self, model, prefix="", tb_writer=None, global_step=None, official=False):
         eval_dataset = get_dataset(self.args, tokenizer=self.tokenizer, evaluate=True)
 
+        if self.args.num_examples:
+            eval_dataset.examples = eval_dataset.examples[:self.args.num_examples]
+            eval_dataset.lengths = eval_dataset.lengths[:self.args.num_examples]
+
         if self.eval_output_dir and not os.path.exists(self.eval_output_dir) and self.args.local_rank in [-1, 0]:
             os.makedirs(self.eval_output_dir)
 

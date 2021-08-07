@@ -136,6 +136,7 @@ def parse_args():
     parser.add_argument("--tensorboard_dir", type=str, required=True)
 
     parser.add_argument("--conll_path_for_eval", type=str, default=None)
+    parser.add_argument("--num-examples", type=int, default=None)
 
     args = parser.parse_args()
     return args

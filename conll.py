@@ -35,6 +35,8 @@ def output_conll(input_file, output_file, predictions, subtoken_map):
             end_map[k] = [cluster_id for cluster_id, start in sorted(v, key=operator.itemgetter(1), reverse=True)]
         prediction_map[doc_key] = (start_map, end_map, word_map)
 
+    filtered_docs = set()
+
     word_index = 0
     for line in input_file.readlines():
         row = line.split()
@@ -44,12 +46,17 @@ def output_conll(input_file, output_file, predictions, subtoken_map):
             begin_match = re.match(BEGIN_DOCUMENT_REGEX, line)
             if begin_match:
                 doc_key = get_doc_key(begin_match.group(1), begin_match.group(2))
+                if doc_key not in prediction_map:
+                    filtered_docs.add(doc_key)
+                    continue
                 start_map, end_map, word_map = prediction_map[doc_key]
                 word_index = 0
             output_file.write(line)
             output_file.write("\n")
         else:
             assert get_doc_key(row[0], row[1]) == doc_key
+            if doc_key in filtered_docs:
+                continue
             coref_list = []
             if word_index in end_map:
                 for cluster_id in end_map[word_index]:
@@ -70,12 +77,15 @@ def output_conll(input_file, output_file, predictions, subtoken_map):
             output_file.write("\n")
             word_index += 1
 
-
 def official_conll_eval(gold_path, predicted_path, metric, official_stdout=True):
-    cmd = ["reference-coreference-scorers/scorer.pl", metric, gold_path, predicted_path, "none"]
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    # Replace this path with your local copy of perl.
+    PERL_PATH = r"C:\Users\Ofir\anaconda3\envs\nlp2\Library\bin\perl.exe"
+    cmd = [PERL_PATH, "reference-coreference-scorers/scorer.pl", metric, gold_path, predicted_path, "none"]
+    logger.info("Running official conll eval: {}".format(" ".join(cmd)))
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = process.communicate()
-    process.wait()
+    res = process.wait()
+    assert res == 0, f"failed with {stdout}"
 
     stdout = stdout.decode("utf-8")
     if stderr is not None:
@@ -93,9 +103,10 @@ def official_conll_eval(gold_path, predicted_path, metric, official_stdout=True)
 
 
 def evaluate_conll(gold_path, predictions, subtoken_maps, official_stdout=True):
-    with tempfile.NamedTemporaryFile(delete=True, mode="w", encoding="utf-8") as prediction_file:
+    predictions_temp = "prediction.remove.me"
+    with open(predictions_temp, mode="w", encoding="utf-8") as prediction_file:
         with open(gold_path, "r", encoding="utf-8") as gold_file:
             output_conll(gold_file, prediction_file, predictions, subtoken_maps)
         # logger.info("Predicted conll file: {}".format(prediction_file.name))
-        results = {m: official_conll_eval(gold_file.name, prediction_file.name, m, official_stdout) for m in ("muc", "bcub", "ceafe") }
+    results = {m: official_conll_eval(gold_path, predictions_temp, m, official_stdout) for m in ("muc", "bcub", "ceafe") }
     return results
