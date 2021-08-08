@@ -124,6 +124,8 @@ def get_dataset(args, tokenizer, evaluate=False):
     # TODO: add cache support
     if args.is_generative:
         val_dataset = pd.read_parquet(args.pandas_dataframe)
+        if args.num_examples:
+            val_dataset = val_dataset[:args.num_examples]
         val_set = CorefPandasDataset(
             val_dataset,
             tokenizer,

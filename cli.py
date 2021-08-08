@@ -142,6 +142,7 @@ def parse_args():
     parser.add_argument("--pandas-dataframe",
                         help="Path to the filtered coreference parquet data frame. "
                              "This is required when --is-generative is passed.")
+    parser.add_argument("--force-gpu", action="store_true", help="Whether to force run on GPU and fail if not available.")
 
     args = parser.parse_args()
     if args.is_generative and not args.pandas_dataframe:

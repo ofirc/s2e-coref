@@ -51,6 +51,8 @@ def main():
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
     args.device = device
+    if args.force_gpu:
+        assert args.device.type == "cuda", "oopsie don't have GPU."
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
