@@ -208,14 +208,16 @@ class GenerativeEvaluator(Evaluator):
                 ids = data['source_ids'].to(self.args.device, dtype=torch.long)
                 mask = data['source_mask'].to(self.args.device, dtype=torch.long)
 
+                # TODO: try to fine-tune:
+                #       length_penalty
+                #       repetition_penalty - for longer sequences
+                #       num beams
+                #
                 generated_ids = model.generate(
                     input_ids=ids,
                     attention_mask=mask,
-                    max_length=150,
-                    num_beams=2,
-                    repetition_penalty=2.5,
-                    length_penalty=1.0,
-                    early_stopping=True
+                    max_length=128,
+                    num_beams=1,
                 )
                 preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in
                          generated_ids]
