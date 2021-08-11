@@ -8,7 +8,7 @@ import torch
 
 from transformers import AutoConfig, AutoTokenizer, CONFIG_MAPPING, LongformerConfig, RobertaConfig
 
-from transformers import T5ForConditionalGeneration
+from transformers import T5ForConditionalGeneration, BartForConditionalGeneration
 
 from modeling import S2E
 from data import get_dataset
@@ -113,8 +113,12 @@ def main():
     else:
         # TODO: why S2E.from_pretrained accepts args and for T5 it throws exception?
         #       do we need to pass args?
-        model = T5ForConditionalGeneration.from_pretrained(args.model_name_or_path, config=config,
-                                                           cache_dir=args.cache_dir)
+        if 'bart' in args.model_type:
+            model = BartForConditionalGeneration.from_pretrained(args.model_name_or_path, config=config,
+                                                                 cache_dir=args.cache_dir)
+        else:
+            model = T5ForConditionalGeneration.from_pretrained(args.model_name_or_path, config=config,
+                                                               cache_dir=args.cache_dir)
 
     model.to(args.device)
 
