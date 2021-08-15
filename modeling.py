@@ -1,7 +1,6 @@
 import torch
 from torch.nn import Module, Linear, LayerNorm, Dropout
 from transformers import BertPreTrainedModel, LongformerModel
-from transformers.modeling_bert import ACT2FN
 from utils import extract_clusters, extract_mentions_to_predicted_clusters_from_clusters, mask_tensor
 
 
@@ -15,6 +14,7 @@ class FullyConnectedLayer(Module):
 
         self.dense = Linear(self.input_dim, self.output_dim)
         self.layer_norm = LayerNorm(self.output_dim, eps=config.layer_norm_eps)
+        from transformers.modeling_bert import ACT2FN
         self.activation_func = ACT2FN[config.hidden_act]
         self.dropout = Dropout(self.dropout_prob)
 
