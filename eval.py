@@ -216,7 +216,7 @@ class GenerativeEvaluator(Evaluator):
                 generated_ids = model.generate(
                     input_ids=ids,
                     attention_mask=mask,
-                    max_length=128,
+                    max_length=self.args.max_seq_length,
                     num_beams=1,
                 )
                 preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in
