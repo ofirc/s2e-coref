@@ -144,6 +144,8 @@ def parse_args():
                              "This is required when --is-generative is passed.")
     parser.add_argument("--force-gpu", action="store_true", help="Whether to force run on GPU and fail if not available.")
 
+    parser.add_argument("--num-beams", type=int, default=1)
+
     args = parser.parse_args()
     if args.is_generative and not args.pandas_dataframe:
         parser.error("you must provide pandas dataframe when using --is-generative.")
