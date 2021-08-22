@@ -247,6 +247,12 @@ class GenerativeEvaluator(Evaluator):
             ("f1", f1)
         ]
         logger.info("***** Eval results {} *****".format(prefix))
+
+        for eval in coref_evaluator.evaluators:
+            prec, rec, f1 = eval.get_prf()
+            eval_name = eval.get_name()
+            logger.info(f"{eval_name}: precision: {prec:.3}, recall: {rec:.3}, f1: {f1:.3}")
+
         for key, values in results:
             if isinstance(values, float):
                 logger.info(f"  {key} = {values:.3f}")

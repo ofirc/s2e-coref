@@ -119,15 +119,12 @@ class CorefDataset(Dataset):
         tensored_batch = tuple(torch.stack([example[i].squeeze() for example in padded_batch], dim=0) for i in range(len(example)))
         return tensored_batch
 
-
 def get_dataset(args, tokenizer, evaluate=False):
     # TODO: add cache support
     if args.is_generative:
         val_dataset = pd.read_parquet(args.pandas_dataframe)
-        inp = val_dataset.iloc[0]["input"]
-        if not inp.startswith("coref: "):
-            val_dataset["input"] = "coref: " + val_dataset["input"]
-        val_dataset["input"]
+        if 'bart' in args.model_type:
+            val_dataset = val_dataset.apply(lambda s: s.str.replace('^coref: ', ''))
         if args.num_examples:
             val_dataset = val_dataset[:args.num_examples]
         val_set = CorefPandasDataset(
