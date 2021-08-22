@@ -325,3 +325,149 @@ class GenerativeEvaluator(Evaluator):
         #         preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in generated_ids]
         #         pass
         #         #target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)for t in y]
+
+class OfflineGenerativeEvaluator(Evaluator):
+    def __init__(self, args, tokenizer):
+        Evaluator.__init__(self, args, tokenizer)
+
+    def evaluate(self, model, prefix="", tb_writer=None, global_step=None, official=False):
+        import pandas as pd
+        val_dataset = pd.read_parquet(self.args.pandas_dataframe)
+
+        if self.args.num_examples:
+            val_dataset = val_dataset[:self.args.num_examples]
+
+        if self.eval_output_dir and not os.path.exists(self.eval_output_dir) and self.args.local_rank in [-1, 0]:
+            os.makedirs(self.eval_output_dir)
+
+        val_params = {
+            "batch_size": 1,
+            "shuffle": False,
+            "num_workers": 0,
+        }
+
+        # Creation of Dataloaders for testing and validation. This will be used down for training and validation stage for the model.
+
+        # Eval!
+        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info("  Examples number: %d", len(val_dataset))
+        model.eval()
+
+        predictions = []
+        actuals = []
+        coref_evaluator = CorefEvaluator()
+        for row in val_dataset.iterrows():
+            # TODO: try to fine-tune:
+            #       length_penalty
+            #       repetition_penalty - for longer sequences
+            #       num beams
+            #
+
+            preds = row["Generated Text"]
+            target = row["output"]
+
+            preds_spans = convert_seq_to_spans(preds)
+            target_spans = convert_seq_to_spans(target)
+
+            mention_to_gold_clusters = extract_mentions_to_predicted_clusters_from_clusters(target_spans)
+            mention_to_predicted_clusters = extract_mentions_to_predicted_clusters_from_clusters(preds_spans)
+            coref_evaluator.update(preds_spans, target_spans,
+                                   mention_to_predicted_clusters,
+                                   mention_to_gold_clusters)
+
+            predictions.extend(preds)
+            actuals.extend(target)
+
+        for eval in coref_evaluator:
+            prec, rec, f1 = eval.get_perf()
+            eval_name = eval.get_name()
+            logger.info(f"{eval_name}: precision: {prec}, recall: {rec}, f1: {f1}")
+
+        prec, rec, f1 = coref_evaluator.get_prf()
+
+        results = []
+        results += [
+            ("precision", prec),
+            ("recall", rec),
+            ("f1", f1)
+        ]
+        logger.info("***** Eval average results {} *****".format(prefix))
+        for key, values in results:
+            if isinstance(values, float):
+                logger.info(f"  {key} = {values:.3f}")
+            else:
+                logger.info(f"  {key} = {values}")
+            if tb_writer is not None and global_step is not None:
+                tb_writer.add_scalar(key, values, global_step)
+
+        if self.eval_output_dir:
+            output_eval_file = os.path.join(self.eval_output_dir, "eval_results.txt")
+            with open(output_eval_file, "a") as writer:
+                if prefix:
+                    writer.write(f'\n{prefix}:\n')
+                for key, values in results:
+                    if isinstance(values, float):
+                        writer.write(f"{key} = {values:.3f}\n")
+                    else:
+                        writer.write(f"{key} = {values}\n")
+
+        results = OrderedDict(results)
+        results["experiment_name"] = self.args.experiment_name
+        results["data"] = prefix
+        with open(os.path.join(self.args.output_dir, "results.jsonl"), "a+") as f:
+            f.write(json.dumps(results) + '\n')
+
+        # TODO: later.
+        # if official:
+        #     with open(os.path.join(self.args.output_dir, "preds.jsonl"), "w") as f:
+        #         f.write(json.dumps(doc_to_prediction) + '\n')
+        #         f.write(json.dumps(doc_to_subtoken_map) + '\n')
+        #
+        #     if self.args.conll_path_for_eval is not None:
+        #         conll_results = evaluate_conll(self.args.conll_path_for_eval, doc_to_prediction, doc_to_subtoken_map)
+        #         official_f1 = sum(results["f"] for results in conll_results.values()) / len(conll_results)
+        #         logger.info('Official avg F1: %.4f' % official_f1)
+
+        return results
+
+
+        # coref_evaluator = CorefEvaluator()
+        # for (doc_key, subtoken_maps), batch in val_loader:
+        #
+        #     batch = tuple(tensor.to(self.args.device) for tensor in batch)
+        #     input_ids, attention_mask, gold_clusters = batch
+        #
+        #     with torch.no_grad():
+        #         # outputs = model(input_ids=input_ids,
+        #         #                 attention_mask=attention_mask,
+        #         #                 gold_clusters=gold_clusters,
+        #         #                 return_all_outputs=True)
+        #
+        #         # TODO: the following code works:
+        #         # ids = torch.randint(3, 5, (2,128))
+        #         # mask = torch.randint(3, 5, (2,128))
+        #         # generated_ids = model.generate(input_ids = ids, attention_mask = mask, max_length=128, num_beams=2, repetition_penalty=2.5, length_penalty=1.0, early_stopping=True)
+        #         # generated_ids.shape
+        #         # torch.Size([2, 128])
+        #
+        #         #
+        #         # But when using the cached pickled artifacts we get [1, 497], and when using the
+        #         # non-cached artifacts, i.e. CorefDataset population, we get [1, 606].
+        #         # We need to wrap the data to max sequence length, 128, this was probably used
+        #         # when we fine-tuned the model and the model refuses to accept other lengths.
+        #         # This (wrapping to 128) should be done in CorefDataset class.
+        #         #
+        #
+        #         generated_ids = model.generate(
+        #             input_ids = input_ids,
+        #             attention_mask = attention_mask,
+        #             max_length=self.args.max_total_seq_len,
+        #             num_beams=2,
+        #             repetition_penalty=2.5,
+        #             length_penalty=1.0,
+        #             early_stopping=True
+        #             )
+        #         preds = [self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in generated_ids]
+        #         pass
+        #         #target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)for t in y]
+

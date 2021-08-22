@@ -145,6 +145,7 @@ def parse_args():
     parser.add_argument("--force-gpu", action="store_true", help="Whether to force run on GPU and fail if not available.")
 
     parser.add_argument("--num-beams", type=int, default=1)
+    parser.add_argument("--is-offline-eval", action="store_true", help="Use both predictions and ground truth from parquet file, don't use the model.")
 
     args = parser.parse_args()
     if args.is_generative and not args.pandas_dataframe:

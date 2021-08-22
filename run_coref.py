@@ -14,7 +14,7 @@ from modeling import S2E
 from data import get_dataset
 from cli import parse_args
 from training import train, set_seed
-from eval import Evaluator, GenerativeEvaluator
+from eval import Evaluator, GenerativeEvaluator, OfflineGenerativeEvaluator
 from utils import write_meta_data
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,10 @@ def main():
     logger.info("Training/evaluation parameters %s", args)
 
     if args.is_generative:
-        evaluator = GenerativeEvaluator(args, tokenizer)
+        if args.is_offline_eval:
+            evaluator = OfflineGenerativeEvaluator(args, tokenizer)
+        else:
+            evaluator = GenerativeEvaluator(args, tokenizer)
     else:
         evaluator = Evaluator(args, tokenizer)
 

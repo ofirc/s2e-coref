@@ -38,7 +38,9 @@ class MentionEvaluator:
 
 class CorefEvaluator(object):
     def __init__(self):
-        self.evaluators = [Evaluator(m) for m in (muc, b_cubed, ceafe)]
+        eval_names = ["muc", "b_cubed", "caefe"]
+        eval_funcs = [muc, b_cubed, ceafe]
+        self.evaluators = [Evaluator(eval_name, eval_func) for eval_name, eval_func in zip(eval_names, eval_funcs)]
 
     def update(self, predicted, gold, mention_to_predicted, mention_to_gold):
         for e in self.evaluators:
@@ -58,7 +60,8 @@ class CorefEvaluator(object):
 
 
 class Evaluator(object):
-    def __init__(self, metric, beta=1):
+    def __init__(self, name, metric, beta=1):
+        self.name = name
         self.p_num = 0
         self.p_den = 0
         self.r_num = 0
@@ -92,6 +95,8 @@ class Evaluator(object):
     def get_counts(self):
         return self.p_num, self.p_den, self.r_num, self.r_den
 
+    def get_name(self):
+        return self.name
 
 def b_cubed(clusters, mention_to_gold):
     num, dem = 0, 0
