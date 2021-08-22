@@ -120,7 +120,8 @@ def main():
             model = T5ForConditionalGeneration.from_pretrained(args.model_name_or_path, config=config,
                                                                cache_dir=args.cache_dir)
 
-    model.to(args.device)
+    if not args.is_offline_eval:
+        model.to(args.device)
 
     if args.local_rank == 0:
         # End of barrier to make sure only the first process in distributed training download model & vocab

@@ -356,7 +356,7 @@ class OfflineGenerativeEvaluator(Evaluator):
         predictions = []
         actuals = []
         coref_evaluator = CorefEvaluator()
-        for row in val_dataset.iterrows():
+        for _, row in val_dataset.iterrows():
             # TODO: try to fine-tune:
             #       length_penalty
             #       repetition_penalty - for longer sequences
@@ -378,10 +378,10 @@ class OfflineGenerativeEvaluator(Evaluator):
             predictions.extend(preds)
             actuals.extend(target)
 
-        for eval in coref_evaluator:
-            prec, rec, f1 = eval.get_perf()
+        for eval in coref_evaluator.evaluators:
+            prec, rec, f1 = eval.get_prf()
             eval_name = eval.get_name()
-            logger.info(f"{eval_name}: precision: {prec}, recall: {rec}, f1: {f1}")
+            logger.info(f"{eval_name}: precision: {prec:.3}, recall: {rec:.3}, f1: {f1:.3}")
 
         prec, rec, f1 = coref_evaluator.get_prf()
 
