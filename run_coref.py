@@ -51,7 +51,7 @@ def main():
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
     args.device = device
-    if args.force_gpu:
+    if args.force_gpu and not args.is_offline_eval:
         assert args.device.type == "cuda", "oopsie don't have GPU."
 
     # Setup logging
